@@ -8,12 +8,14 @@ interface FormFillerProps {
   template: FormTemplate;
   aadhaarData: AadhaarData;
   onFormCompleted: (formData: Record<string, string>) => void;
+  onBack: () => void;
 }
 
 export const FormFiller: React.FC<FormFillerProps> = ({ 
   template, 
   aadhaarData, 
-  onFormCompleted 
+  onFormCompleted,
+  onBack
 }) => {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [currentFieldIndex, setCurrentFieldIndex] = useState(0);
@@ -108,6 +110,16 @@ export const FormFiller: React.FC<FormFillerProps> = ({
 
   return (
     <div className="max-w-5xl mx-auto p-6">
+      <div className="mb-6">
+        <button
+          onClick={onBack}
+          className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-all duration-200"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          <span>वापस जाएं | Go Back</span>
+        </button>
+      </div>
+      
       <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center space-x-3 mb-4">

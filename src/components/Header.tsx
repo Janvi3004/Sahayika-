@@ -1,11 +1,26 @@
 import React from 'react';
-import { Mic, FileText, Shield, Heart } from 'lucide-react';
+import { Mic, FileText, Shield, Heart, ArrowLeft, Home } from 'lucide-react';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  onBackToHome?: () => void;
+  showBackButton?: boolean;
+}
+
+export const Header: React.FC<HeaderProps> = ({ onBackToHome, showBackButton = false }) => {
   return (
     <header className="bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 text-white shadow-lg">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-20">
+          {showBackButton && onBackToHome && (
+            <button
+              onClick={onBackToHome}
+              className="flex items-center space-x-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-xl transition-all duration-200 transform hover:scale-105 backdrop-blur-sm"
+            >
+              <Home className="h-5 w-5 text-white" />
+              <span className="text-white font-medium">होम | Home</span>
+            </button>
+          )}
+          
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2 animate-pulse">
               <div className="relative">
@@ -23,6 +38,7 @@ export const Header: React.FC = () => {
               </p>
             </div>
           </div>
+          
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2 text-sm bg-white/10 px-3 py-2 rounded-full backdrop-blur-sm">
               <Shield className="h-5 w-5 text-green-300" />
