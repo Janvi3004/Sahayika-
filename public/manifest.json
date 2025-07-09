@@ -1,0 +1,16 @@
+{
+  "name": "Sahayika - Voice Form Assistant",
+  "short_name": "Sahayika",
+  "description": "Voice-powered form assistant for government applications",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#10B981",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
