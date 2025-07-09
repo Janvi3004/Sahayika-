@@ -1,15 +1,26 @@
 import React from 'react';
-import { ArrowRight, Users, Sprout } from 'lucide-react';
+import { ArrowRight, Users, Sprout, ArrowLeft } from 'lucide-react';
 import { FormTemplate } from '../types';
 import { formTemplates } from '../utils/formTemplates';
 
 interface FormSelectorProps {
   onFormSelected: (template: FormTemplate) => void;
+  onBack: () => void;
 }
 
-export const FormSelector: React.FC<FormSelectorProps> = ({ onFormSelected }) => {
+export const FormSelector: React.FC<FormSelectorProps> = ({ onFormSelected, onBack }) => {
   return (
     <div className="max-w-4xl mx-auto p-6">
+      <div className="mb-6">
+        <button
+          onClick={onBack}
+          className="flex items-center space-x-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-all duration-200"
+        >
+          <ArrowLeft className="h-5 w-5" />
+          <span>वापस जाएं | Go Back</span>
+        </button>
+      </div>
+      
       <div className="text-center mb-8">
         <h2 className="text-3xl font-bold text-gray-900 mb-2">Choose a Government Form</h2>
         <p className="text-gray-600">
