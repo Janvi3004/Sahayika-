@@ -10,6 +10,7 @@ interface AadhaarUploadProps {
 export const AadhaarUpload: React.FC<AadhaarUploadProps> = ({ onAadhaarProcessed }) => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processingStep, setProcessingStep] = useState<string>('');
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -17,14 +18,24 @@ export const AadhaarUpload: React.FC<AadhaarUploadProps> = ({ onAadhaarProcessed
 
     setIsProcessing(true);
     setError(null);
+    setProcessingStep('Preparing image...');
 
     try {
+      setProcessingStep('Processing with OCR engine...');
       const aadhaarData = await processAadhaarCard(file);
+      setProcessingStep('Extracting information...');
+      
+      // Log the extracted data for debugging
+      console.log('Extracted Aadhaar Data:', aadhaarData);
+      
+      setProcessingStep('Validating data...');
       onAadhaarProcessed(aadhaarData);
     } catch (err) {
+      console.error('Aadhaar processing error:', err);
       setError(err instanceof Error ? err.message : 'Failed to process Aadhaar card');
     } finally {
       setIsProcessing(false);
+      setProcessingStep('');
     }
   };
 
@@ -116,12 +127,12 @@ export const AadhaarUpload: React.FC<AadhaarUploadProps> = ({ onAadhaarProcessed
                   आपका आधार कार्ड प्रोसेस हो रहा है...
                 </p>
                 <p className="text-blue-700">
-                  Processing your Aadhaar card with enhanced OCR... This may take a moment.
+                  {processingStep || 'Processing your Aadhaar card with enhanced OCR...'}
                 </p>
               </div>
             </div>
             <div className="mt-4 w-full bg-blue-200 rounded-full h-2">
-              <div className="bg-blue-500 h-2 rounded-full animate-pulse" style={{width: '60%'}}></div>
+              <div className="bg-blue-500 h-2 rounded-full animate-pulse transition-all duration-500" style={{width: processingStep.includes('Preparing') ? '25%' : processingStep.includes('Processing') ? '50%' : processingStep.includes('Extracting') ? '75%' : '90%'}}></div>
             </div>
           </div>
         )}
