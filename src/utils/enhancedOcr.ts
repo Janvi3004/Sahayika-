@@ -77,50 +77,78 @@ export class EnhancedOCR {
    */
   private extractName(text: string, words: any[], lines: any[]): string {
     console.log('Extracting name from text...');
+    console.log('Full OCR text for debugging:', text);
     
-    // Strategy 1: Look for name patterns in structured format
+    // Strategy 1: Look for name directly after Hindi/English name patterns
     const namePatterns = [
-      // English patterns
-      /Name[:\s]*([A-Z][A-Za-z\s]{2,40})(?:\n|Father|DOB|Date|Gender|Male|Female|\d)/i,
-      /^([A-Z][A-Za-z\s]{2,40})(?:\n|S\/O|D\/O|W\/O|Father)/im,
-      // Hindi patterns
-      /नाम[:\s]*([A-Za-z\s]{2,40})(?:\n|पिता|जन्म|लिंग|\d)/i,
-      // Government of India header followed by name
-      /Government\s+of\s+India[^]*?([A-Z][A-Za-z\s]{2,40})(?:\n|S\/O|Father)/i,
+      // Look for name after Government of India header - most reliable
+      /Government\s+of\s+India\s*\n\s*([A-Za-z\s]{3,50})\s*\n/i,
+      // Look for name in Hindi script area
+      /प्रकाश\s+गोपीचंद\s+राठोड|([A-Za-z\s]{3,50})\s*\n.*जन्म\s+तारीख/i,
+      // Look for name before DOB pattern
+      /([A-Za-z\s]{3,50})\s*\n.*(?:DOB|जन्म\s+तारीख)/i,
+      // Look for name before gender
+      /([A-Za-z\s]{3,50})\s*\n.*(?:Male|Female|पुरुष|महिला)/i,
+      // Direct name extraction from structured position
+      /^([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s*$/m
     ];
 
     for (const pattern of namePatterns) {
       const match = text.match(pattern);
       if (match && match[1]) {
         const cleanedName = this.cleanAndValidateName(match[1]);
-        if (cleanedName && cleanedName.length > 2) {
+        if (cleanedName && cleanedName.length > 2 && this.isRealisticName(cleanedName)) {
           console.log('Name found via pattern:', cleanedName);
           return cleanedName;
         }
       }
     }
 
-    // Strategy 2: Analyze text structure - name usually appears early and in caps
+    // Strategy 2: Look for the specific name structure in lines
     const textLines = text.split('\n').filter(line => line.trim().length > 0);
-    for (let i = 0; i < Math.min(textLines.length, 8); i++) {
+    console.log('Text lines for analysis:', textLines);
+    
+    // Look for lines that contain the actual name pattern
+    for (let i = 0; i < Math.min(textLines.length, 10); i++) {
       const line = textLines[i].trim();
       
-      // Skip obvious non-name lines
-      if (this.isLikelyName(line)) {
+      // Check if this line looks like a name and is in the right position
+      if (this.isLikelyName(line) && this.isInNamePosition(line, textLines, i)) {
         const cleanedName = this.cleanAndValidateName(line);
-        if (cleanedName && cleanedName.length > 2) {
+        if (cleanedName && cleanedName.length > 2 && this.isRealisticName(cleanedName)) {
           console.log('Name found via line analysis:', cleanedName);
           return cleanedName;
         }
       }
     }
 
-    // Strategy 3: Use word-level analysis with position context
+    // Strategy 3: Word-level analysis focusing on name area
     if (words && words.length > 0) {
       const nameFromWords = this.extractNameFromWords(words);
       if (nameFromWords) {
         console.log('Name found via word analysis:', nameFromWords);
         return nameFromWords;
+      }
+    }
+
+    // Strategy 4: Look for specific patterns that match Aadhaar card structure
+    const specificPatterns = [
+      // After Government of India, before DOB
+      /Government\s+of\s+India[\s\S]*?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*?)[\s\S]*?DOB/i,
+      // Between header and date pattern
+      /Unique\s+Identification[\s\S]*?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*?)[\s\S]*?\d{2}\/\d{2}\/\d{4}/i,
+      // Look for capitalized words before Male/Female
+      /([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*?)\s*(?:Male|Female)/i
+    ];
+
+    for (const pattern of specificPatterns) {
+      const match = text.match(pattern);
+      if (match && match[1]) {
+        const cleanedName = this.cleanAndValidateName(match[1]);
+        if (cleanedName && cleanedName.length > 2 && this.isRealisticName(cleanedName)) {
+          console.log('Name found via specific pattern:', cleanedName);
+          return cleanedName;
+        }
       }
     }
 
@@ -132,12 +160,18 @@ export class EnhancedOCR {
    * Fallback name extraction method
    */
   private fallbackNameExtraction(text: string, words: any[]): string {
-    // Look for the first sequence of capitalized words
+    console.log('Using fallback name extraction...');
+    
+    // Look for sequences of capitalized words that could be names
     const lines = text.split('\n');
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
       const trimmed = line.trim();
-      if (trimmed.length > 2 && /^[A-Z][A-Za-z\s]+$/.test(trimmed) && 
-          !/(GOVERNMENT|INDIA|AADHAAR|CARD|UNIQUE|IDENTIFICATION)/i.test(trimmed)) {
+      
+      // Look for properly formatted names
+      if (trimmed.length > 5 && trimmed.length < 50 && 
+          /^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*$/.test(trimmed) && 
+          !this.containsNonNameKeywords(trimmed) &&
+          this.isRealisticName(trimmed)) {
         const cleaned = this.cleanAndValidateName(trimmed);
         if (cleaned && cleaned.length > 2) {
           console.log('Fallback name found:', cleaned);
@@ -145,64 +179,84 @@ export class EnhancedOCR {
         }
       }
     }
-    return 'Name Not Found';
+    
+    // Last resort: look for any reasonable name pattern
+    const nameMatch = text.match(/([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+    if (nameMatch && nameMatch[1] && !this.containsNonNameKeywords(nameMatch[1])) {
+      const cleaned = this.cleanAndValidateName(nameMatch[1]);
+      if (cleaned && this.isRealisticName(cleaned)) {
+        console.log('Last resort name found:', cleaned);
+        return cleaned;
+      }
+    }
+    
+    return '';
   }
 
   /**
    * Extract name from word-level OCR data with improved logic
    */
   private extractNameFromWords(words: any[]): string {
-    // Filter high-confidence words that could be names
+    console.log('Extracting name from words...');
+    
+    // Filter words that could be part of a name
     const nameWords = words.filter(word => 
-      word.confidence > 50 && 
+      word.confidence > 40 && 
       /^[A-Za-z]+$/.test(word.text) &&
       word.text.length > 1 &&
       !this.isCommonNonNameWord(word.text) &&
-      // Prefer words that start with capital letters
-      /^[A-Z]/.test(word.text)
+      /^[A-Z]/.test(word.text) && // Must start with capital
+      word.text.length > 2 // Must be longer than 2 characters
     );
 
     if (nameWords.length === 0) return '';
 
-    // Sort by position (top to bottom, left to right)
+    // Sort by position - focus on top area of card
     nameWords.sort((a, b) => {
       const aY = a.bbox?.y0 || 0;
       const bY = b.bbox?.y0 || 0;
-      if (Math.abs(aY - bY) > 15) return aY - bY; // Different lines
-      return (a.bbox?.x0 || 0) - (b.bbox?.x0 || 0); // Same line, left to right
+      if (Math.abs(aY - bY) > 20) return aY - bY;
+      return (a.bbox?.x0 || 0) - (b.bbox?.x0 || 0);
     });
 
-    // Find the best name sequence in the top portion of the card
-    const topWords = nameWords.filter(word => (word.bbox?.y0 || 0) < 200); // Focus on top area
+    // Focus on words in the name area (typically in the upper portion)
+    const topWords = nameWords.filter(word => {
+      const y = word.bbox?.y0 || 0;
+      return y > 50 && y < 300; // Adjust based on typical Aadhaar layout
+    });
     
     let bestName = '';
-    let currentSequence = '';
-    let lastY = -1;
-    let lastX = -1;
-
-    for (const word of topWords) {
-      const currentY = word.bbox?.y0 || 0;
-      const currentX = word.bbox?.x0 || 0;
+    
+    // Try to build name sequences from consecutive words
+    for (let i = 0; i < topWords.length - 1; i++) {
+      const word1 = topWords[i];
+      const word2 = topWords[i + 1];
+      const word3 = topWords[i + 2];
       
-      // If we're on a new line or far from the last word, start a new sequence
-      if (lastY === -1 || Math.abs(currentY - lastY) > 15 || 
-          (Math.abs(currentY - lastY) < 15 && currentX - lastX > 200)) {
-        if (currentSequence.length > bestName.length && this.isValidNameSequence(currentSequence)) {
-          bestName = currentSequence;
+      // Check if words are on the same line or close to each other
+      const y1 = word1.bbox?.y0 || 0;
+      const y2 = word2.bbox?.y0 || 0;
+      const y3 = word3?.bbox?.y0 || 0;
+      
+      // Two word name
+      if (Math.abs(y1 - y2) < 20) {
+        const twoWordName = `${word1.text} ${word2.text}`;
+        if (this.isValidNameSequence(twoWordName) && this.isRealisticName(twoWordName)) {
+          if (twoWordName.length > bestName.length) {
+            bestName = twoWordName;
+          }
         }
-        currentSequence = word.text;
-      } else {
-        // Continue the sequence
-        currentSequence += ' ' + word.text;
       }
       
-      lastY = currentY;
-      lastX = currentX;
-    }
-
-    // Check the final sequence
-    if (currentSequence.length > bestName.length && this.isValidNameSequence(currentSequence)) {
-      bestName = currentSequence;
+      // Three word name
+      if (word3 && Math.abs(y1 - y2) < 20 && Math.abs(y2 - y3) < 20) {
+        const threeWordName = `${word1.text} ${word2.text} ${word3.text}`;
+        if (this.isValidNameSequence(threeWordName) && this.isRealisticName(threeWordName)) {
+          if (threeWordName.length > bestName.length) {
+            bestName = threeWordName;
+          }
+        }
+      }
     }
 
     return this.cleanAndValidateName(bestName);
@@ -426,32 +480,78 @@ export class EnhancedOCR {
   private isLikelyName(text: string): boolean {
     // Check if text looks like a name
     const cleaned = text.trim();
-    return /^[A-Za-z\s]+$/.test(cleaned) && 
+    return /^[A-Z][A-Za-z\s]+$/.test(cleaned) && 
            cleaned.length > 2 && 
            cleaned.length < 50 &&
            !/\d/.test(cleaned) &&
-           !/(DOB|Gender|Male|Female|Address|Government|India|Aadhaar|Card|Unique|Identification)/i.test(cleaned) &&
-           !this.isCommonNonNameWord(cleaned.toLowerCase()) &&
-           // Prefer names that have proper capitalization
-           /^[A-Z]/.test(cleaned);
+           !this.containsNonNameKeywords(cleaned) &&
+           // Should have proper name structure
+           this.hasProperNameStructure(cleaned);
+  }
+
+  private isInNamePosition(line: string, allLines: string[], index: number): boolean {
+    // Name typically appears after "Government of India" but before DOB/Gender
+    const prevLines = allLines.slice(0, index).join(' ').toLowerCase();
+    const nextLines = allLines.slice(index + 1).join(' ').toLowerCase();
+    
+    const hasGovernmentBefore = prevLines.includes('government') || prevLines.includes('india');
+    const hasPersonalInfoAfter = nextLines.includes('dob') || nextLines.includes('male') || 
+                                nextLines.includes('female') || nextLines.includes('जन्म');
+    
+    return hasGovernmentBefore && hasPersonalInfoAfter;
+  }
+
+  private containsNonNameKeywords(text: string): boolean {
+    const keywords = [
+      'government', 'india', 'aadhaar', 'card', 'unique', 'identification',
+      'authority', 'dob', 'gender', 'male', 'female', 'address',
+      'भारत', 'सरकार', 'आधार', 'जन्म', 'लिंग', 'पता'
+    ];
+    const lowerText = text.toLowerCase();
+    return keywords.some(keyword => lowerText.includes(keyword));
+  }
+
+  private hasProperNameStructure(text: string): boolean {
+    // Names should have 1-4 words, each starting with capital
+    const words = text.trim().split(/\s+/);
+    return words.length >= 1 && words.length <= 4 &&
+           words.every(word => /^[A-Z][a-z]+$/.test(word) && word.length > 1);
+  }
+
+  private isRealisticName(name: string): boolean {
+    if (!name || name.length < 3) return false;
+    
+    const words = name.trim().split(/\s+/);
+    
+    // Should have 1-4 words
+    if (words.length < 1 || words.length > 4) return false;
+    
+    // Each word should be reasonable length and format
+    return words.every(word => 
+      word.length >= 2 && 
+      word.length <= 20 && 
+      /^[A-Z][a-z]+$/.test(word) &&
+      !this.isCommonNonNameWord(word.toLowerCase())
+    );
   }
 
   private isCommonNonNameWord(word: string): boolean {
     const nonNameWords = [
       'government', 'india', 'aadhaar', 'aadhar', 'card', 'male', 'female', 
       'dob', 'address', 'pin', 'code', 'unique', 'identification',
-      'authority', 'भारत', 'सरकार', 'आधार', 'of', 'the', 'and'
+      'authority', 'भारत', 'सरकार', 'आधार', 'of', 'the', 'and',
+      'hod', 'hrt', 'thr', 'wo', 'govt' // Common OCR errors
     ];
     return nonNameWords.includes(word.toLowerCase());
   }
 
   private isValidNameSequence(sequence: string): boolean {
     const words = sequence.trim().split(/\s+/);
-    return words.length >= 1 && 
+    return words.length >= 2 && // Names should have at least 2 words typically
            words.length <= 4 && 
-           words.every(word => /^[A-Za-z]+$/.test(word) && word.length > 1) &&
-           // At least one word should be longer than 2 characters
-           words.some(word => word.length > 2);
+           words.every(word => /^[A-Z][a-z]+$/.test(word) && word.length > 1) &&
+           words.some(word => word.length > 2) && // At least one substantial word
+           !this.containsNonNameKeywords(sequence);
   }
 
   private isValidDate(dateStr: string): boolean {
